@@ -24,68 +24,201 @@ function isSuited(cards) {
   return cards[0].suit === cards[1].suit;
 }
 
+function hasStraightDraw(cards) {
+  const ranks = cards.map((card) => card.rank).sort((a, b) => a - b);
+  const uniqueRanks = [...new Set(ranks)];
+  const gaps = [];
+
+  for (let i = 0; i < uniqueRanks.length - 1; i++) {
+    gaps.push(uniqueRanks[i + 1] - uniqueRanks[i]);
+  }
+
+  return gaps.filter((gap) => gap === 1).length >= 3;
+}
+
+function hasFlushDraw(cards) {
+  const suitCounts = {};
+  cards.forEach((card) => {
+    suitCounts[card.suit] = (suitCounts[card.suit] || 0) + 1;
+  });
+  return Object.values(suitCounts).some((count) => count >= 4);
+}
+
+function hasPair(cards) {
+  const ranks = cards.map((card) => card.rank);
+  return ranks.some((r) => ranks.filter((x) => x === r).length >= 2);
+}
+
+function hasTrips(cards) {
+  const ranks = cards.map((card) => card.rank);
+  return ranks.some((r) => ranks.filter((x) => x === r).length >= 3);
+}
+
+function hasTwoPair(cards) {
+  const rankCounts = {};
+  cards.forEach((card) => {
+    rankCounts[card.rank] = (rankCounts[card.rank] || 0) + 1;
+  });
+  return Object.values(rankCounts).filter((count) => count >= 2).length >= 2;
+}
+
+function getHandType(cards) {
+  // Ordenar las cartas por el valor de su rango
+  const sortedCards = cards.sort((a, b) => a.rank - b.rank);
+  const ranks = sortedCards.map((card) => card.rank);
+  const suits = sortedCards.map((card) => card.suit);
+
+  // Verificar pares, tríos y más
+  const rankCounts = {};
+  ranks.forEach((rank) => {
+    rankCounts[rank] = (rankCounts[rank] || 0) + 1;
+  });
+
+  // Comprobar si se tiene una escalera
+  const isStraight =
+    ranks.length >= 5 &&
+    new Set(ranks).size === ranks.length &&
+    Math.max(...ranks) - Math.min(...ranks) === ranks.length - 1;
+
+  // Comprobar si se tiene un color
+  const isFlush = suits.some(
+    (suit) => suits.filter((s) => s === suit).length >= 5
+  );
+
+  // Determinar tipo de mano
+  if (isStraight && isFlush) return "Straight Flush";
+  if (Object.values(rankCounts).includes(4)) return "Four of a Kind";
+  if (
+    Object.values(rankCounts).includes(3) &&
+    Object.values(rankCounts).includes(2)
+  )
+    return "Full House";
+  if (isFlush) return "Flush";
+  if (isStraight) return "Straight";
+  if (Object.values(rankCounts).includes(3)) return "Three of a Kind";
+  if (Object.values(rankCounts).filter((count) => count === 2).length === 2)
+    return "Two Pair";
+  if (Object.values(rankCounts).includes(2)) return "One Pair";
+  return "High Card";
+}
+
 function getFirstDecisionStrategy(playerCards) {
   const ranks = playerCards.map((card) => card.rank).sort((a, b) => b - a);
   const suited = isSuited(playerCards);
 
+  // Pairs
   if (ranks[0] === ranks[1]) {
-    if (ranks[0] === 2) return "Check";
-    return "Raise";
-  }
-
-  if (suited) {
-    if (ranks[0] === 14) return "Raise";
-    if (ranks[0] === 13) return "Raise";
-    if (ranks[0] === 12 && ranks[1] >= 6) return "Raise";
-    if (ranks[0] === 11 && ranks[1] >= 8) return "Raise";
+    if (ranks[0] >= 3) return "Raise"; // Pair of 3's or higher
     return "Check";
   }
 
-  if (ranks[0] === 14) return "Raise";
-  if (ranks[0] === 13 && ranks[1] >= 5) return "Raise";
-  if (ranks[0] === 12 && ranks[1] >= 8) return "Raise";
-  if (ranks[0] === 11 && ranks[1] === 10) return "Raise";
+  // Ace anything
+  if (ranks[0] === 14) return "Raise"; // Ace + anything
+
+  // Suited cards
+  if (suited) {
+    if (ranks[0] === 13) return "Raise"; // Any suited King
+    if (ranks[0] === 12 && ranks[1] >= 6) return "Raise"; // Queen + 6 or higher suited
+    if (ranks[0] === 11 && ranks[1] >= 8) return "Raise"; // Jack + 8 or higher suited
+  }
+
+  // Offsuit cards
+  if (ranks[0] === 13 && ranks[1] >= 5) return "Raise"; // King + 5 or higher
+  if (ranks[0] === 12 && ranks[1] >= 8) return "Raise"; // Queen + 8 or higher
+  if (ranks[0] === 11 && ranks[1] >= 10) return "Raise"; // Jack + Ten
+
   return "Check";
 }
 
 function getSecondDecisionStrategy(playerCards, communityCards) {
   const allCards = [...playerCards, ...communityCards.slice(0, 3)];
-  const ranks = allCards.map((card) => card.rank);
+  const boardCards = communityCards.slice(0, 3);
+  const hasBoardPair = hasPair(boardCards);
+  const isBoardSuited = hasFlushDraw(boardCards);
 
-  const hasThreeOfKind = ranks.some(
-    (r) => ranks.filter((x) => x === r).length === 3
-  );
-  if (hasThreeOfKind) return "Raise";
+  // Check for pair with hole card
+  if (hasPair(allCards)) {
+    // Small pocket pair check
+    if (
+      playerCards[0].rank === playerCards[1].rank &&
+      playerCards[0].rank <= 4
+    ) {
+      if (
+        hasBoardPair &&
+        Math.max(...boardCards.map((c) => c.rank)) > playerCards[0].rank
+      ) {
+        return "Check";
+      }
+    }
 
-  const hasPairWithHoleCard = playerCards.some((playerCard) =>
-    communityCards
-      .slice(0, 3)
-      .some((communityCard) => playerCard.rank === communityCard.rank)
-  );
+    // Suited board check
+    if (isBoardSuited) {
+      const hasFlushDr = hasFlushDraw(allCards);
+      const kicker = Math.max(...playerCards.map((c) => c.rank));
+      const maxBoardRank = Math.max(...boardCards.map((c) => c.rank));
 
-  if (hasPairWithHoleCard) return "Raise";
+      if (!hasFlushDr && kicker < maxBoardRank) {
+        return "Check";
+      }
+    }
+
+    return "Raise";
+  }
+
+  // High card on paired board
+  if (hasBoardPair && Math.max(...playerCards.map((c) => c.rank)) === 14) {
+    return "Raise";
+  }
+
+  // Straight draws
+  if (hasStraightDraw(allCards)) {
+    if (!isBoardSuited || hasFlushDraw(allCards)) {
+      const minPlayerRank = Math.min(...playerCards.map((c) => c.rank));
+      if (minPlayerRank >= 8) return "Raise"; // JT98 or better
+    }
+  }
+
+  // Flush draws
+  if (hasFlushDraw(allCards)) {
+    // Implementar lógica de flush draw según la posición (4th nut o mejor)
+    return "Raise";
+  }
 
   return "Check";
 }
 
 function getFinalDecisionStrategy(playerCards, communityCards) {
   const allCards = [...playerCards, ...communityCards];
-  const ranks = allCards.map((card) => card.rank);
+  const handType = getHandType(allCards); // Obtener tipo de mano
 
-  const hasPairWithHoleCard = playerCards.some((playerCard) =>
-    communityCards.some(
-      (communityCard) => playerCard.rank === communityCard.rank
-    )
-  );
+  const boardCards = communityCards;
 
-  if (hasPairWithHoleCard) return "Raise";
+  // Verificar si la mano en la mesa es ganadora
+  const hasBoardStraight =
+    hasStraightDraw(boardCards) && boardCards.length >= 5;
+  const hasBoardFlush = hasFlushDraw(boardCards) && boardCards.length >= 5;
 
-  const hasBoardPair = communityCards.some((card1, i) =>
-    communityCards.some((card2, j) => i !== j && card1.rank === card2.rank)
-  );
+  if (hasBoardStraight || hasBoardFlush) return "Raise"; // Call to play the board
 
-  if (hasBoardPair && Math.max(...playerCards.map((c) => c.rank)) >= 13)
-    return "Raise";
+  // Verificar la mano ganadora
+  const handMessage = `Current Hand: ${handType}`;
+
+  // Has pair that plays
+  if (hasPair(allCards)) {
+    const pairWithHoleCard = playerCards.some((playerCard) =>
+      communityCards.some(
+        (communityCard) => playerCard.rank === communityCard.rank
+      )
+    );
+    if (pairWithHoleCard) return handMessage; // Mostrar la mano
+  }
+
+  // Comprobar pares en la mesa
+  const hasBoardPair = hasPair(boardCards);
+  if (hasBoardPair) {
+    const highCard = Math.max(...playerCards.map((c) => c.rank));
+    if (highCard >= 13) return "Raise"; // 3rd nut kicker or better
+  }
 
   return "Fold";
 }
