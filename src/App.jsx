@@ -1,10 +1,10 @@
 import React from "react";
-import UltimateHoldem from "./components/UltimateHoldem";
+import TexasHoldemStrategy from "./components/TexasHoldemStrategy";
 
 function App() {
   return (
     <div>
-      <UltimateHoldem />
+      <TexasHoldemStrategy />
     </div>
   );
 }
