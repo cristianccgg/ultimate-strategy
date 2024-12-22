@@ -316,9 +316,12 @@ export default function TexasHoldemStrategy() {
 
             <div className="mt-4">
               <h3 className="text-lg font-semibold mb-2">Available Cards</h3>
-              <div className="flex grid-cols-4 gap-1 overflow-x-auto">
+              <div className="flex gap-0 overflow-x-auto h-[400px]">
                 {RANKS.map((rank) => (
-                  <div key={rank} className="flex flex-col">
+                  <div
+                    key={rank}
+                    className="flex flex-col scale-50 xl:scale-100"
+                  >
                     {SUITS.map((suit) => (
                       <PlayingCard
                         key={`${rank}${suit}`}
